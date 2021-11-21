@@ -134,10 +134,25 @@ def normlize_data(data):
     return data, mean, std
 
 
+def get_normalized_adj(A):
+    """
+    Returns a tensor, the degree normalized adjacency matrix.
+    """
+    alpha = 0.8
+    D = np.array(np.sum(A, axis=1)).reshape((-1,))
+    D[D <= 10e-5] = 10e-5
+    diag = np.reciprocal(np.sqrt(D))
+    A_wave = np.multiply(np.multiply(
+        diag.reshape((-1, 1)), A), diag.reshape((1, -1)))
+    A_reg = alpha / 2 * (np.eye(A.shape[0]) + A_wave)
+    return A_reg.astype(np.float32)
+
+
 def data_factory(name: str):
     adj, data = function_for_dataset[name.upper()]()
     normlized_data, mean, std = normlize_data(data)
-    return normlized_data, mean, std, adj
+    normlized_adj = get_normalized_adj(adj)
+    return normlized_data, mean, std, normlized_adj
 
 
 if __name__ == '__main__':
