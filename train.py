@@ -14,7 +14,7 @@ from loguru import logger
 from metrices import masked_mae_np, masked_mape_np, masked_rmse_np
 from evaluation import evaluation
 
-from models.STGCN import STGCN_with_embedding, STGCN
+from models.model_v1 import GRU, Archer
 
 
 if torch.cuda.is_available():
@@ -41,7 +41,10 @@ def set_log(logPattern):
         print(options)
 
 
-writer = SummaryWriter()
+if args.tensorboard:
+    writer = SummaryWriter()
+else:
+    writer = None
 
 
 def output_metrices(name, metrices, epoch=0, outToStd=True):
@@ -114,11 +117,12 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
             best_valid_rmse = eval_metrices[2]
             print('New best rmse results!')
             torch.save(model.state_dict(),
-                       f'net_params_{args.dataset}_best.pkl')
+                       f'./best_model_params/net_params_{args.dataset}_best.pkl')
 
         scheduler.step()
 
-    model.load_state_dict(torch.load(f'net_params_{args.dataset}_best.pkl'))
+    model.load_state_dict(torch.load(
+        f'./best_model_params/net_params_{args.dataset}_best.pkl'))
     test_metrices = evaluation(model, data_util, is_test=False, device=device)
     output_metrices("Test", test_metrices)
 
@@ -126,8 +130,8 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
 if __name__ == '__main__':
     loss = nn.L1Loss()
     data_util = tDataUtil(args)
-    model = STGCN(data_util.num_node, num_features=1,
-                  num_timesteps_input=12, num_timesteps_output=12, adj=data_util.adj, device=device).to(device)
+    model = Archer(data_util.num_node, args.n_history,
+                   1, 1, data_util.adj).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     train_main(model, data_util, optimizer, loss)
