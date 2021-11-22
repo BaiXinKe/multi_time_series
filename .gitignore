@@ -1,1 +1,5 @@
 dataset/*
+**/__pycache__
+runs/*
+*.pkl
+best_model_params/*
