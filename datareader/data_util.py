@@ -32,8 +32,10 @@ class tDataUtil:
     def _generator_loader(data, args, shuffle):
         if args.sample == 'normal':
             dataset = DatasetNormal(data, args.n_history, args.n_predict)
-        elif args.sample == 'with_preweek':
+        elif args.sample == 'preweek':
             dataset = DatasetWithPreWeek(data, args.n_history, args.n_predict)
+        else:
+            raise ValueError("Choice the sample function in [normal, preweek]")
 
         data_loader = DataLoader(
             dataset, batch_size=args.batch_size, shuffle=shuffle, drop_last=True)

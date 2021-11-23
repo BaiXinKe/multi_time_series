@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 from torch.utils.data.dataset import Dataset
-from torch.utils.data.dataloader import DataLoader
-from datareader.reader import data_factory
 
 TimestamplePerWeek = 12 * 24 * 7
 
@@ -36,3 +34,11 @@ class DatasetWithPreWeek(Dataset):
 
     def __len__(self):
         return self.total_inputs
+
+
+def Split_last_week_filter(data, n_history, n_predict):
+    last_week = data[:, :n_history + n_predict, ...]
+    last_week_now = last_week[:, :n_history, ...]
+    last_week_predict = last_week[:, n_history:n_history+n_predict, ...]
+    now_history = data[:, n_history+n_predict:, ...]
+    return last_week_now, last_week_predict, now_history
