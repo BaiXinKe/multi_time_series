@@ -6,7 +6,7 @@ import numpy as np
 from torch.nn.functional import log_softmax
 from torch.nn.modules.container import ModuleList
 from torch.utils import data
-from datareader.with_preweek_dataset import Split_last_week_filter
+#from datareader.with_preweek_dataset import Split_last_week_filter
 
 
 class TCNLayer(nn.Module):
@@ -161,14 +161,13 @@ class Decoder(nn.Module):
         hidden_state = [state]
         for i in range(self.n_predict - 1):
             state = hidden_state[-1]
-            for j in range(self.n_layer):
-                state = self.layers[j](
-                    preweek_pre[:, i, :, :], state, self.adj)
-                # !!! state = self.layers[j]( ,state, self.adj)
-                # 这里就是现在要考虑的重点，如何就组织上一周的数据和本周预测的数据
-                # 从NLP来开，输入到decoder的是目标序列，因此，我们输入可以使用这个
+            state = self.layers[0](preweek_pre[:, i, :, :], state, self.adj)
+            for j in range(1, self.n_layer):
+                state = self.layers[j](state, hidden_state[-1], self.adj)
+            hidden_state.append(state)
+
         result = torch.stack(hidden_state, dim=1)
-        print(result.shape)
+        return result
 
 
 if __name__ == '__main__':
