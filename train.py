@@ -3,6 +3,7 @@ import torch
 import random
 import numpy as np
 import torch.nn as nn
+from torch.utils import data
 from tqdm import tqdm
 from options import args
 from torch.optim.lr_scheduler import StepLR
@@ -14,7 +15,7 @@ from loguru import logger
 from metrices import masked_mae_np, masked_mape_np, masked_rmse_np
 from evaluation import evaluation
 
-from models.model_v2 import TCN
+from models.model_v2 import Archer
 
 
 if torch.cuda.is_available():
@@ -130,7 +131,8 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
 if __name__ == '__main__':
     loss = nn.L1Loss()
     data_util = tDataUtil(args)
-    model = TCN(args.n_history, 1, 32, 1).to(device)
+    model = Archer(data_util.num_node, args.n_history,
+                   args.n_predict, 1, 32, 1, data_util.adj, n_layer_decoder=1).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     train_main(model, data_util, optimizer, loss)

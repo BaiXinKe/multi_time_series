@@ -6,7 +6,7 @@ import numpy as np
 from torch.nn.functional import log_softmax
 from torch.nn.modules.container import ModuleList
 from torch.utils import data
-#from datareader.with_preweek_dataset import Split_last_week_filter
+from datareader.with_preweek_dataset import Split_last_week_filter
 
 
 class TCNLayer(nn.Module):
@@ -89,8 +89,6 @@ class GCNCell(nn.Module):
         adj: (num_node, num_node)
         """
         lfs = torch.einsum('ij,jbf->bif', adj, inputs.permute(1, 0, 2))
-        print(self.weight.shape)
-        print(lfs.shape)
         result = torch.relu(torch.matmul(lfs, self.weight) + self.bais)
         return result
 
@@ -157,7 +155,7 @@ class Decoder(nn.Module):
         """
         inputs = inputs[:, 0, :, :]
         state = torch.zeros(
-            inputs.shape[0], inputs.shape[1], self.mid_features)
+            inputs.shape[0], inputs.shape[1], self.mid_features).to(inputs.device)
         hidden_state = [state]
         for i in range(self.n_predict - 1):
             state = hidden_state[-1]
@@ -167,16 +165,44 @@ class Decoder(nn.Module):
             hidden_state.append(state)
 
         result = torch.stack(hidden_state, dim=1)
+        result = torch.relu(torch.einsum(
+            'btnf,nfo->btno', result, self.linear))
         return result
+
+
+class Archer(nn.Module):
+    def __init__(self, num_node, n_history, n_predict, in_features, mid_features, out_features, adj, n_layer_decoder=2) -> None:
+        super(Archer, self).__init__()
+        self.n_history = n_history
+        self.n_predict = n_predict
+        self.tcn = TCN(n_history=n_history,
+                       in_features=in_features, mid_features=mid_features)
+        self.decoder = Decoder(n_layer=n_layer_decoder, num_node=num_node, n_predict=n_predict,
+                               adj=adj, in_features=mid_features, mid_features=mid_features, out_features=out_features)
+        self.linear = nn.Parameter(
+            torch.FloatTensor(num_node, in_features, mid_features))
+
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        stdv = 1. / math.sqrt(self.linear.shape[1])
+        self.linear.data.uniform_(-stdv, stdv)
+
+    def forward(self, inputs):
+        _, pw_pre, now = Split_last_week_filter(
+            inputs, self.n_history, self.n_predict)
+
+        out = self.tcn(now)
+        pw_pre = torch.relu(torch.einsum(
+            'btnf, nfo->btno', pw_pre, self.linear))
+        out = self.decoder(out, pw_pre)
+        return out
 
 
 if __name__ == '__main__':
     adj = np.random.randn(307, 307).astype(np.float32)
-    net = Decoder(n_layer=2, num_node=307, n_predict=12, adj=adj,
-                  in_features=1, mid_features=32, out_features=1)
-    data = torch.randn(64, 12, 307, 1)
-    preweek_pre = torch.randn(64, 12, 307, 1)
-
-    res = net(data, preweek_pre)
+    net = Archer(307, 12, 12, 1, 32, 1, adj)
+    data = torch.randn(64, 36, 307, 1)
+    res = net(data)
 
     print(res.shape)
