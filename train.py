@@ -132,7 +132,7 @@ if __name__ == '__main__':
     loss = nn.L1Loss()
     data_util = tDataUtil(args)
     model = Archer(data_util.num_node, args.n_history,
-                   args.n_predict, 1, 32, 1, data_util.adj, n_layer_decoder=1).to(device)
+                   args.n_predict, 1, 32, 1, data_util.adj).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     train_main(model, data_util, optimizer, loss)

@@ -1,16 +1,12 @@
 import math
 import torch
-from torch._C import dtype
 import torch.nn as nn
 import numpy as np
-from torch.nn.functional import linear, log_softmax
-from torch.nn.modules.container import ModuleList
-from torch.utils import data
-from datareader.with_preweek_dataset import Split_last_week_filter
+import torch.nn.functional as F
 
 
 class TCNLayer(nn.Module):
-    def __init__(self, in_features, out_features, kernel=3):
+    def __init__(self, in_features, out_features, kernel=3, dropout=0.5):
         super(TCNLayer, self).__init__()
         self.conv1 = nn.Conv2d(in_features, out_features,
                                kernel_size=(1, kernel))
@@ -18,6 +14,8 @@ class TCNLayer(nn.Module):
                                kernel_size=(1, kernel))
         self.conv3 = nn.Conv2d(in_features, out_features,
                                kernel_size=(1, kernel))
+        self.bn = nn.BatchNorm2d(out_features)
+        self.dropout = dropout
 
     def forward(self, inputs):
         """
@@ -27,7 +25,9 @@ class TCNLayer(nn.Module):
         inputs = inputs.permute(0, 3, 2, 1)  # (btnf->bfnt)
         out = self.conv1(inputs) + torch.sigmoid(self.conv2(inputs))
         out = torch.relu(out + self.conv3(inputs))
+        out = self.bn(out)
         out = out.permute(0, 3, 2, 1)
+        out = F.dropout(out, p=self.dropout, training=self.training)
         return out
 
 
@@ -93,85 +93,8 @@ class GCNCell(nn.Module):
         return result
 
 
-class DecoderCell(nn.Module):
-    def __init__(self, num_node, in_features, out_features) -> None:
-        super(DecoderCell, self).__init__()
-        self.reset_gate = GCNCell(
-            in_features + out_features, out_features)
-        self.br = nn.Parameter(torch.zeros(num_node, out_features))
-        self.update_gate = GCNCell(
-            in_features + out_features, out_features)
-        self.bu = nn.Parameter(torch.zeros(num_node, out_features))
-        self.candidate = GCNCell(
-            in_features + out_features, out_features)
-        self.bc = nn.Parameter(torch.zeros(num_node, out_features))
-
-    def forward(self, inputs, state, adj):
-        """
-        inputs: (batch_size, num_node, in_features)
-        state : (batch_size, num_node, out_features)
-        return: (batch_size, num_node, out_features)
-        """
-        concat_xs = torch.concat([inputs, state], dim=-1)
-        Rt = torch.relu(self.reset_gate(concat_xs, adj) + self.br)
-        Ut = torch.relu(self.update_gate(concat_xs, adj) + self.bu)
-        Rt_dot_state = Rt * state
-        cat_xrts = torch.concat([inputs, Rt_dot_state], dim=-1)
-        Ct = torch.tanh(self.candidate(cat_xrts, adj) + self.bc)
-        out = Ut * state + (1-Ut) * Ct
-        return out
-
-
-class Decoder(nn.Module):
-    def __init__(self, n_layer, num_node, n_predict, adj, in_features, mid_features, out_features) -> None:
-        super(Decoder, self).__init__()
-
-        self.n_layer = n_layer
-        self.num_node = num_node
-        self.n_predict = n_predict
-
-        self.mid_features = mid_features
-
-        self.adj = nn.Parameter(torch.from_numpy(adj))
-
-        self.layers = ModuleList(
-            [DecoderCell(num_node, in_features, mid_features)])
-        for i in range(1, self.n_layer):
-            self.layers.append(DecoderCell(
-                num_node, mid_features, mid_features))
-
-        self.linear = nn.Parameter(
-            torch.FloatTensor(num_node, mid_features, out_features))
-
-        self.reset_parameter()
-
-    def reset_parameter(self):
-        stdv = 1. / math.sqrt(self.linear.shape[1])
-        self.linear.data.uniform_(-stdv, stdv)
-
-    def forward(self, inputs, preweek_pre):
-        """
-        inputs: (batch_size, 1, num_node, in_features)
-        """
-        inputs = inputs[:, 0, :, :]
-        state = torch.zeros(
-            inputs.shape[0], inputs.shape[1], self.mid_features).to(inputs.device)
-        hidden_state = [state]
-        for i in range(self.n_predict - 1):
-            state = hidden_state[-1]
-            state = self.layers[0](preweek_pre[:, i, :, :], state, self.adj)
-            for j in range(1, self.n_layer):
-                state = self.layers[j](state, hidden_state[-1], self.adj)
-            hidden_state.append(state)
-
-        result = torch.stack(hidden_state, dim=1)
-        result = torch.relu(torch.einsum(
-            'btnf,nfo->btno', result, self.linear))
-        return result
-
-
 class Archer(nn.Module):
-    def __init__(self, num_node, n_history, n_predict, in_features, mid_features, out_features, adj, n_layer_decoder=2) -> None:
+    def __init__(self, num_node, n_history, n_predict, in_features, mid_features, out_features, adj) -> None:
         super(Archer, self).__init__()
         self.n_history = n_history
         self.n_predict = n_predict
@@ -181,7 +104,11 @@ class Archer(nn.Module):
         self.gcn = GCNCell(in_features=mid_features, out_features=mid_features)
 
         self.linear = nn.Parameter(
-            torch.FloatTensor(num_node, mid_features, out_features * n_predict))
+            torch.FloatTensor(num_node, mid_features, mid_features * n_predict))
+        self.predict = nn.Parameter(
+            torch.FloatTensor(num_node, mid_features *
+                              n_predict, out_features * n_predict)
+        )
 
         self.reset_parameter()
 
@@ -193,7 +120,8 @@ class Archer(nn.Module):
         out = self.tcn(inputs)
         out = out.squeeze(1)
         out = self.gcn(out, self.adj)
-        out = torch.einsum('bnf,nfo->bno', out, self.linear)
+        out = torch.relu(torch.einsum('bnf,nfo->bno', out, self.linear))
+        out = torch.einsum('bnf,nfo->bno', out, self.predict)
         out = out.unsqueeze(-1)
         out = out.permute(0, 2, 1, 3)
         return out
