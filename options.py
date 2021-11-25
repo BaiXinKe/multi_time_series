@@ -1,7 +1,5 @@
 import argparse
 
-from numpy.core.fromnumeric import var
-
 
 parser = argparse.ArgumentParser()
 
