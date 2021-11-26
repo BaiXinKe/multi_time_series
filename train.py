@@ -129,7 +129,7 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
 
 
 if __name__ == '__main__':
-    loss = nn.L1Loss()
+    loss = nn.MSELoss()
     data_util = tDataUtil(args)
     model = Archer(data_util.num_node, args.n_history,
                    args.n_predict, 1, 32, 1, data_util.adj).to(device)
