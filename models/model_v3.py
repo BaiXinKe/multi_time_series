@@ -1,4 +1,5 @@
 import torch
+from torch._C import device
 import torch.nn as nn
 import numpy as np
 
@@ -103,12 +104,13 @@ class Encoder(nn.Module):
 
 
 class GCNCell(nn.Module):
-    def __init__(self, in_features, out_features, dropout=0.5) -> None:
+    def __init__(self, in_features, out_features, cheb_k=3, dropout=0.5) -> None:
         super(GCNCell, self).__init__()
         self.weight = nn.Parameter(
             torch.FloatTensor(in_features, out_features))
         self.bais = nn.Parameter(torch.FloatTensor(out_features))
 
+        self.cheb_k = cheb_k
         self.dropout = dropout
 
         self.reset_parameter()
@@ -122,7 +124,14 @@ class GCNCell(nn.Module):
         inputs: (batch_size, timestamp, num_node, num_features)
         adj: (num_node, num_node)
         """
-        lfs = torch.einsum('ij,jbtf->bitf', adj, inputs.permute(2, 0, 1, 3))
+        supports = [torch.eye(adj.shape[0]).to(adj.device), adj]
+        for k in range(2, self.cheb_k):
+            supports.append(torch.matmul(2 * adj, supports[-1]) - supports[-2])
+
+        supports = torch.stack(supports, dim=0)
+
+        lfs = torch.einsum('kij,jbtf->bitf', supports,
+                           inputs.permute(2, 0, 1, 3))
         result = torch.relu(torch.matmul(lfs, self.weight) + self.bais)
         return result.permute(0, 2, 1, 3)
 
