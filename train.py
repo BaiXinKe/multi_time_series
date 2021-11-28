@@ -15,7 +15,7 @@ from loguru import logger
 from metrices import masked_mae_np, masked_mape_np, masked_rmse_np
 from evaluation import evaluation
 
-from models.model_v2 import Archer
+from models.model_v3 import Archer
 
 
 if torch.cuda.is_available():
@@ -131,8 +131,8 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
 if __name__ == '__main__':
     loss = nn.MSELoss()
     data_util = tDataUtil(args)
-    model = Archer(data_util.num_node, args.n_history,
-                   args.n_predict, 1, 32, 1, data_util.adj).to(device)
+    model = Archer(n_history=args.n_history, n_predict=args.n_predict, in_features=1,
+                   mid_features=32, out_features=1, adj=data_util.adj).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     train_main(model, data_util, optimizer, loss)
