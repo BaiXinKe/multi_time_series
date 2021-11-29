@@ -50,22 +50,18 @@ class TCN(nn.Module):
             self.tcn_layers.append(
                 TCNLayer(mid_features, mid_features, kernel=2))
 
-        self.upsample = None if in_features == mid_features else nn.Linear(
-            in_features, mid_features)
-
-        self.reset_parameter()
-
-    def reset_parameter(self):
-        if self.upsample is not None:
-            for param in self.upsample.parameters():
-                param.data.normal_()
+        self.upsample = None if in_features == mid_features else nn.Conv2d(
+            in_features, mid_features, kernel_size=1)
 
     def forward(self, inputs):
         out = self.tcn_layers[0](inputs)
         if self.upsample:
-            inputs = self.upsample(inputs)
+            ResConn = self.upsample(inputs.permute(0, 3, 2, 1))
+            ResConn = ResConn.permute(0, 3, 2, 1)
+        else:
+            ResConn = inputs
 
-        out = out + inputs[:, 2:, ...]
+        out = out + ResConn[:, 2:, ...]
 
         for i in range(1, self.n_layers):
             out = self.tcn_layers[i](out) + out[:, 2:, ...]
@@ -137,18 +133,49 @@ class GCNCell(nn.Module):
 
 
 class Archer(nn.Module):
-    def __init__(self, n_history, n_predict, in_features, mid_features, out_features, adj) -> None:
+    def __init__(self, num_node, num_embed, n_history, n_predict, in_features, mid_features, out_features, adj) -> None:
         super(Archer, self).__init__()
-        self.adj = nn.Parameter(torch.from_numpy(adj))
+        self.adj = nn.Parameter(torch.from_numpy(adj), requires_grad=False)
+        self.embed = nn.Parameter(torch.FloatTensor(num_node, num_embed))
+
         self.encoder = Encoder(n_history, n_predict,
                                in_features, mid_features)
+
         self.gcn = GCNCell(mid_features, mid_features)
+
+        self.gcn_with_embed = GCNCell(mid_features, mid_features)
+        self.leakyRelu = nn.LeakyReLU()
+
+        self.downsample = nn.Conv2d(
+            2 * mid_features, mid_features, kernel_size=1)
+
         self.fully = nn.Linear(mid_features, mid_features)
         self.predict = nn.Linear(mid_features, out_features)
 
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        self.embed.data.normal_()
+
     def forward(self, inputs):
         out = self.encoder(inputs)
+
+        ResConn = out
+
+        dynamic_adj = torch.softmax(self.leakyRelu(torch.matmul(
+            self.embed, self.embed.T)), dim=1)
+        embed_out = self.gcn_with_embed(out, dynamic_adj)
+
         out = self.gcn(out, self.adj)
+
+        out = torch.cat([embed_out, out], dim=-1)
+
+        out = out.permute(0, 3, 2, 1)
+        out = self.downsample(out)
+        out = out.permute(0, 3, 2, 1)
+
+        out += ResConn
+
         out = torch.relu(self.fully(out))
         out = self.predict(out)
         return out

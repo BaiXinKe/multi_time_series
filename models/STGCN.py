@@ -92,7 +92,7 @@ class STGCN(nn.Module):
     num_features).
     """
 
-    def __init__(self, num_nodes, num_features, num_timesteps_input, num_timesteps_output, adj, device):
+    def __init__(self, num_nodes, num_features, num_timesteps_input, num_timesteps_output, adj):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -111,7 +111,7 @@ class STGCN(nn.Module):
             (num_timesteps_input - 2 * 5) * 64, num_timesteps_output)
 
         self.adj = nn.Parameter(
-            torch.from_numpy(adj), requires_grad=True)
+            torch.from_numpy(adj), requires_grad=False)
 
     def forward(self, X):
         """
@@ -126,23 +126,3 @@ class STGCN(nn.Module):
         out4 = out4.unsqueeze(-1)
         out4 = out4.permute(0, 2, 1, 3)
         return out4
-
-
-class STGCN_with_embedding(nn.Module):
-    def __init__(self, num_nodes, embed_size, num_features, num_timesteps_input, num_timesteps_output):
-        super(STGCN_with_embedding, self).__init__()
-        self.embedding = nn.Parameter(
-            torch.FloatTensor(num_nodes, embed_size))
-
-        self.stgcn = STGCN(num_nodes, num_features,
-                           num_timesteps_input, num_timesteps_output)
-
-        for param in self.parameters():
-            nn.init.uniform_(param)
-
-    def forward(self, inputs):
-        supports = torch.softmax(torch.relu(
-            torch.mm(self.embedding, self.embedding.transpose(0, 1))), dim=1)
-
-        out = self.stgcn(inputs, supports)
-        return out

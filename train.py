@@ -16,6 +16,7 @@ from metrices import masked_mae_np, masked_mape_np, masked_rmse_np
 from evaluation import evaluation
 
 from models.model_v3 import Archer
+from models.STGCN import STGCN
 
 
 if torch.cuda.is_available():
@@ -131,7 +132,7 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
 if __name__ == '__main__':
     loss = nn.MSELoss()
     data_util = tDataUtil(args)
-    model = Archer(n_history=args.n_history, n_predict=args.n_predict, in_features=1,
+    model = Archer(data_util.num_node, num_embed=9, n_history=args.n_history, n_predict=args.n_predict, in_features=1,
                    mid_features=32, out_features=1, adj=data_util.adj).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 

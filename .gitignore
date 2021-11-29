@@ -3,3 +3,4 @@ dataset/*
 runs/*
 *.pkl
 best_model_params/*
+nohup.out
