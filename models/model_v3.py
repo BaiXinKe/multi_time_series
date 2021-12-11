@@ -1,3 +1,4 @@
+import math
 import torch
 from torch._C import device
 import torch.nn as nn
@@ -22,8 +23,9 @@ class TCNLayer(nn.Module):
         return: (batch_size, timestamp - 2, num_node, out_features)
         """
         inputs = inputs.permute(0, 3, 2, 1)  # (btnf->bfnt)
-        out = self.conv1(inputs) + torch.sigmoid(self.conv2(inputs))
-        out = torch.relu(out + self.conv3(inputs))
+        out = torch.relu(self.conv1(inputs)) * \
+            torch.sigmoid(self.conv2(inputs))
+        #out = torch.relu(out + self.conv3(inputs))
         out = self.bn(out)
         out = out.permute(0, 3, 2, 1)
         out = torch.dropout(out, p=self.dropout, train=self.training)
@@ -63,11 +65,14 @@ class TCN(nn.Module):
 
         out = out + ResConn[:, 2:, ...]
 
+        tmp = [out[:]]
         for i in range(1, self.n_layers):
-            out = self.tcn_layers[i](out) + out[:, 2:, ...]
+            out = self.tcn_layers[i](
+                out) + out[:, 2:, ...] + ResConn[:, 2 * (i+1):, ...]
 
         if self.is_even:
-            out = self.tcn_layers[-1](out) + out[:, -1, :, :].unsqueeze(1)
+            out = self.tcn_layers[-1](out) + out[:, -1,
+                                                 :, :].unsqueeze(1) + ResConn[:, -1:, ...]
 
         return out
 
@@ -135,16 +140,18 @@ class GCNCell(nn.Module):
 class Archer(nn.Module):
     def __init__(self, num_node, num_embed, n_history, n_predict, in_features, mid_features, out_features, adj) -> None:
         super(Archer, self).__init__()
+        self.pre_linear = nn.Linear(in_features, mid_features)
+
         self.adj = nn.Parameter(torch.from_numpy(adj), requires_grad=False)
         self.embed = nn.Parameter(torch.FloatTensor(num_node, num_embed))
 
         self.encoder = Encoder(n_history, n_predict,
-                               in_features, mid_features)
+                               mid_features, mid_features)
 
         self.gcn = GCNCell(mid_features, mid_features)
 
         self.gcn_with_embed = GCNCell(mid_features, mid_features)
-        self.leakyRelu = nn.LeakyReLU()
+        self.leakyRelu = nn.ReLU()
 
         self.downsample = nn.Conv2d(
             2 * mid_features, mid_features, kernel_size=1)
@@ -158,7 +165,9 @@ class Archer(nn.Module):
         self.embed.data.normal_()
 
     def forward(self, inputs):
-        out = self.encoder(inputs)
+        out = torch.relu(self.pre_linear(inputs))
+
+        out = self.encoder(out)
 
         ResConn = out
 
@@ -174,7 +183,7 @@ class Archer(nn.Module):
         out = self.downsample(out)
         out = out.permute(0, 3, 2, 1)
 
-        out += ResConn
+        out = out + ResConn
 
         out = torch.relu(self.fully(out))
         out = self.predict(out)

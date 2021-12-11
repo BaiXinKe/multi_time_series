@@ -2,6 +2,7 @@ import os
 import torch
 import random
 import numpy as np
+from torch._C import import_ir_module
 import torch.nn as nn
 from torch.utils import data
 from tqdm import tqdm
@@ -130,10 +131,11 @@ def train_main(model, data_util: tDataUtil, optimizer, criterion):
 
 
 if __name__ == '__main__':
-    loss = nn.MSELoss()
+    loss = nn.L1Loss()
     data_util = tDataUtil(args)
-    model = Archer(data_util.num_node, num_embed=9, n_history=args.n_history, n_predict=args.n_predict, in_features=1,
-                   mid_features=32, out_features=1, adj=data_util.adj).to(device)
+    model = Archer(data_util.num_node, num_embed=9, n_history=args.n_history, n_predict=args.n_predict,
+                   in_features=1, mid_features=32, out_features=1, adj=data_util.adj).to(device)
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     train_main(model, data_util, optimizer, loss)
