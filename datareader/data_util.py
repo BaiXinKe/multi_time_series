@@ -46,14 +46,14 @@ if __name__ == '__main__':
     class args(object):
         pass
 
-    args.dataset = 'pems04'
+    args.dataset = 'NPEMS04'
     args.train_rate = 0.7
     args.test_rate = 0.15
     args.valid_rate = 0.15
     args.n_history = 12
     args.n_predict = 12
     args.batch_size = 64
-    args.sample = 'with_preweek'
+    args.sample = 'normal'
 
     dataUtil = tDataUtil(args)
     print(len(dataUtil.train_loader))

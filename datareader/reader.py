@@ -1,15 +1,19 @@
-from matplotlib.pyplot import axis
+
+from importlib.resources import path
 import numpy as np
 import h5py
 import pandas as pd
-import matplotlib.pylab as plt
 
 link_of_data = {
     'metr-la': './dataset/METR-LA/metrla.npy',
     'pems-bay': './dataset/PEMS-BAY/pems-bay.h5',
     'pems04': './dataset/PEMS04/pems04.npz',
     'pems08': './dataset/PEMS08/pems08.npz',
-    'pemsD7': './dataset/PEMSD7/PeMSD7_V_228.csv'
+    'pemsD7': './dataset/PEMSD7/PeMSD7_V_228.csv',
+    'npems03': './dataset/NEWPEMS/PEMS03/PEMS03.npz',
+    'npems04': './dataset/NEWPEMS/PEMS04/PEMS04.npz',
+    'npems07': './dataset/NEWPEMS/PEMS07/PEMS07.npz',
+    'npems08': './dataset/NEWPEMS/PEMS08/PEMS08.npz'
 }
 
 link_of_adj = {
@@ -17,7 +21,11 @@ link_of_adj = {
     'pems-bay': './dataset/PEMS-BAY/distance.csv',
     'pems04': './dataset/PEMS04/distance.csv',
     'pems08': './dataset/PEMS08/distance.csv',
-    'pemsD7': './dataset/PEMSD7/distance.csv'
+    'pemsD7': './dataset/PEMSD7/distance.csv',
+    'npems03': './dataset/NEWPEMS/PEMS03/PEMS03.csv',
+    'npems04': './dataset/NEWPEMS/PEMS04/PEMS04.csv',
+    'npems07': './dataset/NEWPEMS/PEMS07/PEMS07.csv',
+    'npems08': './dataset/NEWPEMS/PEMS08/PEMS08.csv'
 }
 
 
@@ -83,6 +91,37 @@ def load_pems_bay():
     return adj_mx, data
 
 
+def Pems03_Mapper_Table(file_path):
+    fileMapper = open(file_path)
+    mapper_dict = {}
+    for index, line in enumerate(fileMapper.readlines()):
+        if line[-1] == '\n':
+            line = line[:-1]
+        mapper_dict[int(line)] = index
+    return mapper_dict
+
+
+def read_n_pems03_csv(file_path, num_sensors, epsilon=0.1):
+    mapper_path = "." + file_path.split('.')[1] + '.txt'
+    print(file_path)
+    mapper_table = Pems03_Mapper_Table(mapper_path)
+    try:
+        distance = pd.read_csv(file_path)
+    except FileNotFoundError:
+        print(f'ERROR: input file was not fount in {path}')
+
+    dist_mx = np.zeros((num_sensors, num_sensors), dtype=np.float32)
+    dist_mx[:] = np.inf
+    for row in distance.values:
+        dist_mx[mapper_table[int(row[0])], mapper_table[int(row[1])]] = row[2]
+    distances = dist_mx[~np.isinf(dist_mx)].flatten()
+    std = distances.std()
+    adj_max = np.exp(-np.square(dist_mx/std))
+
+    adj_max[adj_max < epsilon] = 0
+    return adj_max
+
+
 def load_pems_04():
     data = np.load(link_of_data['pems04'])['data']
     adj = read_distance_csv(link_of_adj['pems04'], num_sensors=data.shape[1])
@@ -92,6 +131,30 @@ def load_pems_04():
 def load_pems_08():
     data = np.load(link_of_data['pems08'])['data']
     adj = read_distance_csv(link_of_adj['pems08'], num_sensors=data.shape[1])
+    return adj, np.expand_dims(data[:, :, 0], axis=-1)
+
+
+def load_n_pems_03():
+    data = np.load(link_of_data['npems03'])['data']
+    adj = read_n_pems03_csv(link_of_adj['npems03'], num_sensors=data.shape[1])
+    return adj, np.expand_dims(data[:, :, 0], axis=-1)
+
+
+def load_n_pems_04():
+    data = np.load(link_of_data['npems04'])['data']
+    adj = read_distance_csv(link_of_adj['npems04'], num_sensors=data.shape[1])
+    return adj, np.expand_dims(data[:, :, 0], axis=-1)
+
+
+def load_n_pems_07():
+    data = np.load(link_of_data['npems07'])['data']
+    adj = read_distance_csv(link_of_adj['npems07'], num_sensors=data.shape[1])
+    return adj, np.expand_dims(data[:, :, 0], axis=-1)
+
+
+def load_n_pems_08():
+    data = np.load(link_of_data['npems08'])['data']
+    adj = read_distance_csv(link_of_adj['npems08'], num_sensors=data.shape[1])
     return adj, np.expand_dims(data[:, :, 0], axis=-1)
 
 
@@ -117,6 +180,10 @@ function_for_dataset = {
     'PEMS04': load_pems_04,
     'PEMS08': load_pems_08,
     'PEMS07': load_pems_d7,
+    'NPEMS03': load_n_pems_03,
+    'NPEMS04': load_n_pems_04,
+    'NPEMS07': load_n_pems_07,
+    'NPEMS08': load_n_pems_08
 }
 
 

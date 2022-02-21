@@ -2,10 +2,7 @@ import os
 import torch
 import random
 import numpy as np
-from torch._C import import_ir_module
 import torch.nn as nn
-from torch.utils import data
-from tqdm import tqdm
 from options import args
 from torch.optim.lr_scheduler import StepLR
 from datareader.data_util import tDataUtil
@@ -16,7 +13,7 @@ from loguru import logger
 from metrices import masked_mae_np, masked_mape_np, masked_rmse_np
 from evaluation import evaluation
 
-from models.model_v3 import Archer
+from models.model_v6 import Archer
 from models.STGCN import STGCN
 
 
@@ -135,6 +132,9 @@ if __name__ == '__main__':
     data_util = tDataUtil(args)
     model = Archer(data_util.num_node, num_embed=9, n_history=args.n_history, n_predict=args.n_predict,
                    in_features=1, mid_features=32, out_features=1, adj=data_util.adj).to(device)
+
+    model = STGCN(data_util.num_node, 1, args.n_history,
+                  args.n_predict, data_util.adj).to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 

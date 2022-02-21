@@ -3,7 +3,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--epochs', type=int, default=1000, help='train epochs')
+parser.add_argument('--epochs', type=int, default=400, help='train epochs')
 parser.add_argument('--batch-size', type=int, default=64, help='batch size')
 
 parser.add_argument('--dataset', type=str,
